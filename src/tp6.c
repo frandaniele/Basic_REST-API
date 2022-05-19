@@ -11,16 +11,36 @@ int callback_get(const struct _u_request * request, struct _u_response * respons
     (void)response;
     (void)user_data;
 
-    json_t * json_body = json_object();
-    json_object_set_new(json_body, "id", json_integer(2));
-    json_object_set_new(json_body, "username", json_string("fran"));
-    json_object_set_new(json_body, "created_at", json_string("hoy"));
-    json_object_set_new(json_body, "id2", json_integer(1));
-    json_object_set_new(json_body, "username2", json_string("asd"));
-    json_object_set_new(json_body, "created_at2", json_string("mañana"));
-    ulfius_set_json_body_response(response, 200, json_body);
+    struct group *grupo = getgrnam("api_users");
+    struct passwd *user = getpwent();
 
-    logg("log_api_users", ": usuarios creados -> ", "5");
+    json_t *json_list = json_array();
+
+    int count = 0;
+    while(user != NULL){
+        if(user->pw_gid == grupo->gr_gid){
+            count++;
+
+            char *username = user->pw_name;
+            json_t *json_users = json_object();
+
+            json_object_set_new(json_users, "user_id", json_integer(count));
+            json_object_set_new(json_users, "username", json_string(username));
+            json_array_append_new(json_list, json_users);
+        }
+        user = getpwent();
+    }
+    endpwent();
+
+    json_t *json_response = json_object();
+    json_object_set_new(json_response, "data", json_list);
+    json_decref(json_list);
+    
+    ulfius_set_json_body_response(response, 200, json_response);
+
+    char cant[5];
+    sprintf(cant, "%i", count);
+    logg("log_api_users", ": usuarios creados -> ", cant);
     
     return U_CALLBACK_COMPLETE;
 }
