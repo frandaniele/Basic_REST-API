@@ -8,25 +8,43 @@ int checkBadNames(char *str){
 
 int callback_get(const struct _u_request * request, struct _u_response * response, void * user_data) {
     (void)request;
-    (void)response;
     (void)user_data;
 
-    json_t * json_body = json_object();
-    json_object_set_new(json_body, "id", json_integer(2));
-    json_object_set_new(json_body, "username", json_string("fran"));
-    json_object_set_new(json_body, "created_at", json_string("hoy"));
-    json_object_set_new(json_body, "id2", json_integer(1));
-    json_object_set_new(json_body, "username2", json_string("asd"));
-    json_object_set_new(json_body, "created_at2", json_string("mañana"));
-    ulfius_set_json_body_response(response, 200, json_body);
+    struct group *grupo = getgrnam("api_users");
+    struct passwd *user = getpwent();
 
-    logg("log_api_users", ": usuarios creados -> ", "5");
+    json_t *json_list = json_array();
+
+    int count = 0;
+    while(user != NULL){
+        if(user->pw_gid == grupo->gr_gid){
+            count++;
+
+            char *username = user->pw_name;
+            json_t *json_users = json_object();
+
+            json_object_set_new(json_users, "user_id", json_integer(count));
+            json_object_set_new(json_users, "username", json_string(username));
+            json_array_append_new(json_list, json_users);
+        }
+        user = getpwent();
+    }
+    endpwent();
+
+    json_t *json_response = json_object();
+    json_object_set_new(json_response, "data", json_list);
+    
+    ulfius_set_json_body_response(response, 200, json_response);
+    json_decref(json_list);
+
+    char cant[5];
+    sprintf(cant, "%i", count);
+    logg("/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/log_api_users", ": usuarios creados -> ", cant);
     
     return U_CALLBACK_COMPLETE;
 }
 
 int callback_post(const struct _u_request * request, struct _u_response * response, void * user_data) {
-    (void)response;
     (void)user_data;
 
     json_t * json_body = json_object();
@@ -44,9 +62,9 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
 
     //CHEQUEAR BADNAMES + USUARIO REPETIDO
     if(checkBadNames(username) || checkBadNames(password)){
-        json_object_set_new(json_body, "code", json_integer(200));
+        json_object_set_new(json_body, "code", json_integer(400));
         json_object_set_new(json_body, "description", json_string("Usuario o contrasenia no permitidos"));
-        ulfius_set_json_body_response(response, 200, json_body);
+        ulfius_set_json_body_response(response, 400, json_body);
         return U_CALLBACK_COMPLETE;
     }
 
@@ -56,9 +74,9 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     while(user != NULL){
         if (user->pw_gid == grupo->gr_gid && strcmp(username, user->pw_name) == 0){
             endpwent();
-            json_object_set_new(json_body, "code", json_integer(200));
+            json_object_set_new(json_body, "code", json_integer(409));
             json_object_set_new(json_body, "description", json_string("El usuario ya existe"));
-            ulfius_set_json_body_response(response, 200, json_body);
+            ulfius_set_json_body_response(response, 409, json_body);
             return U_CALLBACK_COMPLETE;
         }
         user = getpwent();
@@ -70,36 +88,70 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
    // printf("aaa\n");
    // printf("%s\n", ip);
 
-    char *uadd = "useradd -g api_users ";
-    char *encrypt = " -p $(openssl passwd -1 ";
-    char *close = ")";
+    struct _u_response response_from_counter;
+    struct _u_request request_to_counter;
 
-    size_t str_size = strlen(uadd) + strlen(encrypt) + strlen(close) + strlen(username) + strlen(password);
-    char *cmd = malloc(str_size);
-    strcpy(cmd, uadd);
-    strcat(cmd, username);
-    strcat(cmd, encrypt);
-    strcat(cmd, password);
-    strcat(cmd, close);
+    if(send_request(&request_to_counter , &response_from_counter, "GET", "http://contadordeusuarios.com/contador/value") == U_CALLBACK_COMPLETE){
+        json_object_set_new(json_body, "code", json_integer(404));
+        json_object_set_new(json_body, "description", json_string("Counter resource not found"));
+        ulfius_set_json_body_response(response, 404, json_body);
+        return U_CALLBACK_COMPLETE;
+    }
+    else{
+        json_t *json_resp = ulfius_get_json_body_response(&response_from_counter, NULL);
+        if(json_resp == NULL){
+            fprintf(stderr, "get json body error\n");
+            return 1;
+        }
 
-    FILE *cmd_pipe = popen(cmd, "w");
-    if(cmd_pipe == NULL) error("popen");
+        char *uadd = "useradd -g api_users ";
+        char *encrypt = " -p $(openssl passwd -1 ";
+        char *close = ")";
 
-    if(pclose(cmd_pipe) == -1) error("pclose");
+        size_t str_size = strlen(uadd) + strlen(encrypt) + strlen(close) + strlen(username) + strlen(password);
+        char *cmd = malloc(str_size);
+        strcpy(cmd, uadd);
+        strcat(cmd, username);
+        strcat(cmd, encrypt);
+        strcat(cmd, password);
+        strcat(cmd, close);
 
-   // ulfius_send_http_request(const struct _u_request * request, struct _u_response * response);
-    //mando el request, recibo la respuesta y decodifico el json
-    json_object_set_new(json_body, "id", json_integer(2));
-    json_object_set_new(json_body, "username", json_string(username));
+        FILE *cmd_pipe = popen(cmd, "w");
+        if(cmd_pipe == NULL) error("popen");
+        free(cmd);
 
-    time_t cr_at = time(NULL);
-    json_object_set_new(json_body, "created_at", json_string(ctime(&cr_at)));
+        if(pclose(cmd_pipe) == -1) error("pclose");
 
-    ulfius_set_json_body_response(response, 200, json_body);
+        json_tmp = json_object_get(json_resp, "description");
+        json_int_t id = json_integer_value(json_tmp);
 
-    logg("log_api_users", ": usuario creado, id -> ", "4");
+        json_object_set_new(json_body, "id", json_integer(id));
+        json_object_set_new(json_body, "username", json_string(username));
 
-    free(cmd);
+        json_object_set_new(json_body, "created_at", json_string(get_time()));
+
+        ulfius_set_json_body_response(response, 200, json_body);
+
+        char identificacion[5];
+        sprintf(identificacion, "%i", (int)id);
+        logg("log_api_users", ": usuario creado, id -> ", identificacion);
+    }
+
+    ulfius_clean_request(&request_to_counter);
+    ulfius_clean_response(&response_from_counter);
+
+    //incremento contador
+    struct _u_response response_from_counter_incr;
+    struct _u_request request_to_counter_incr;
+
+    if(send_request(&request_to_counter_incr , &response_from_counter_incr, "POST", "http://contadordeusuarios.com/contador/increment") == U_CALLBACK_COMPLETE){
+        json_object_set_new(json_body, "code", json_integer(404));
+        json_object_set_new(json_body, "description", json_string("Counter resource not found"));
+        ulfius_set_json_body_response(response, 404, json_body);
+        return U_CALLBACK_COMPLETE;
+    }
+    ulfius_clean_request(&request_to_counter_incr);
+    ulfius_clean_response(&response_from_counter_incr);
 
     return U_CALLBACK_COMPLETE;
 }
