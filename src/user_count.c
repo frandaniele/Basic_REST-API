@@ -35,11 +35,33 @@ int callback_increment(const struct _u_request * request, struct _u_response * r
 
 int main()
 {
-    struct _u_instance instance;
+    int contador;
 
-    int contador = 0;
+    struct _u_response response_from_get_user;
+    struct _u_request request_to_counter_get_user;
+
+    if(send_request(&request_to_counter_get_user , &response_from_get_user, "GET", "http://laboratorio6.com/api/users") == U_CALLBACK_COMPLETE){
+        contador = 0;
+    }
+    else{
+        json_t *json_resp = ulfius_get_json_body_response(&response_from_get_user, NULL);
+        if(json_resp == NULL){
+            fprintf(stderr, "get json body error\n");
+            return 1;
+        }
+
+        json_t *json_tmp = json_object_get(json_resp, "data");
+        size_t last_id = json_array_size(json_tmp);
+
+        contador = (int) last_id;
+    }
+
+    ulfius_clean_request(&request_to_counter_get_user);
+    ulfius_clean_response(&response_from_get_user);
+
     int * ptr = &contador;
 
+    struct _u_instance instance;
     if(ulfius_init_instance(&instance, PORT, NULL, NULL) != U_OK) {
         fprintf(stderr, "Error ulfius_init_instance, abort\n");
         return(1);
