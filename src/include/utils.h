@@ -12,3 +12,5 @@ void error(char *msj);
 char* get_time();
 
 void logg(char *file, char *msj, char *var);
+
+int send_request( struct _u_request * request, struct _u_response * response, char *method, char *url);
