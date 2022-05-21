@@ -64,16 +64,12 @@ USERADMIN ALL = NOPASSWD: /sbin/useradd
 [Unit]
 Description=servicio de contador de usuarios
 
-Wants=network.target
-After=syslog.target network-online.target
-
 [Service]
 Type=simple
 User=admin_users
+WorkingDirectory=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin
 ExecStart=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/counter
-Restart=on-failure
-RestartSec=10
-KillMode=process
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
@@ -85,16 +81,12 @@ WantedBy=multi-user.target
 [Unit]
 Description=creador de usuarios
 
-Wants=network.target
-After=syslog.target network-online.target
-
 [Service]
 Type=simple
 User=admin_users
+WorkingDirectory=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin
 ExecStart=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/regs
-Restart=on-failure
-RestartSec=10
-KillMode=process
+Restart=always
 
 [Install]
 WantedBy=multi-user.target

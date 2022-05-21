@@ -4,7 +4,6 @@
 
 int callback_print(const struct _u_request * request, struct _u_response * response, void * user_data) {
     (void)request;
-    (void)response;
 
     int * counter = (int *) user_data;
    
@@ -17,13 +16,17 @@ int callback_print(const struct _u_request * request, struct _u_response * respo
 }
 
 int callback_increment(const struct _u_request * request, struct _u_response * response, void * user_data) {
-    (void)request;
-    (void)response;
-    
     int * counter = (int *) user_data;
     (*counter)++;
 
-    logg("log_user_count", ": contador incrementado desde -> ip ", "127.0.0.1");
+    json_t *json_req = ulfius_get_json_body_request(request, NULL);
+    if(json_req == NULL){
+        fprintf(stderr, "get json body error\n");
+        return -1;
+    }
+
+    json_t *json_ip = json_object_get(json_req, "ip");
+    logg("/var/log/laboratorio6/counter.log", "Servicio de contador | contador incrementado desde -> ip ", (char *)json_string_value(json_ip));
 
     json_t * json_body = json_object();
     json_object_set_new(json_body, "code", json_integer(200));
@@ -33,33 +36,17 @@ int callback_increment(const struct _u_request * request, struct _u_response * r
     return U_CALLBACK_COMPLETE;
 }
 
-int main()
-{
-    int contador;
-
-    struct _u_response response_from_get_user;
-    struct _u_request request_to_counter_get_user;
-
-    if(send_request(&request_to_counter_get_user , &response_from_get_user, "GET", "http://laboratorio6.com/api/users") == U_CALLBACK_COMPLETE){
-        contador = 0;
-    }
-    else{
-        json_t *json_resp = ulfius_get_json_body_response(&response_from_get_user, NULL);
-        if(json_resp == NULL){
-            fprintf(stderr, "get json body error\n");
-            return 1;
-        }
-
-        json_t *json_tmp = json_object_get(json_resp, "data");
-        size_t last_id = json_array_size(json_tmp);
-
-        contador = (int) last_id;
-    }
-
-    ulfius_clean_request(&request_to_counter_get_user);
-    ulfius_clean_response(&response_from_get_user);
-
+int main(){
+    int contador = 0;
     int * ptr = &contador;
+
+    struct group *grupo = getgrnam("api_users");
+    struct passwd *user = getpwent();
+    while(user != NULL){
+        if(user->pw_gid == grupo->gr_gid) contador++;
+        user = getpwent();
+    }
+    endpwent();
 
     struct _u_instance instance;
     if(ulfius_init_instance(&instance, PORT, NULL, NULL) != U_OK) {
@@ -72,9 +59,8 @@ int main()
 
     if (ulfius_start_framework(&instance) == U_OK) {
         printf("Se inició el framework en el puerto %d.\n", instance.port);
-        printf("Pulsa enter para salir.\n");
 
-        getchar();
+        while(1);
     } else {
         fprintf(stderr, "Error starting framework\n");
     }

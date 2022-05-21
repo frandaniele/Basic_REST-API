@@ -10,20 +10,35 @@ int callback_get(const struct _u_request * request, struct _u_response * respons
     (void)request;
     (void)user_data;
 
+    json_t *json_response = json_object();
+
+    //obtengo contador
+    struct _u_response response_from_counter;
+    struct _u_request request_to_counter;
+
+    if(send_request(&request_to_counter , &response_from_counter, "GET", "http://contadordeusuarios.com/contador/value", request->auth_basic_user, request->auth_basic_password, NULL) == U_CALLBACK_ERROR){
+        json_object_set_new(json_response, "code", json_integer(404));
+        json_object_set_new(json_response, "description", json_string("Counter resource not found"));
+        ulfius_set_json_body_response(response, 404, json_response);
+
+        ulfius_clean_request(&request_to_counter);
+        ulfius_clean_response(&response_from_counter);
+
+        return U_CALLBACK_COMPLETE;
+    }
+
     struct group *grupo = getgrnam("api_users");
     struct passwd *user = getpwent();
 
     json_t *json_list = json_array();
 
-    int count = 0;
     while(user != NULL){
         if(user->pw_gid == grupo->gr_gid){
-            count++;
-
             char *username = user->pw_name;
+            unsigned int id = user->pw_uid;
             json_t *json_users = json_object();
 
-            json_object_set_new(json_users, "user_id", json_integer(count));
+            json_object_set_new(json_users, "user_id", json_integer(id));
             json_object_set_new(json_users, "username", json_string(username));
             json_array_append_new(json_list, json_users);
         }
@@ -31,15 +46,26 @@ int callback_get(const struct _u_request * request, struct _u_response * respons
     }
     endpwent();
 
-    json_t *json_response = json_object();
     json_object_set_new(json_response, "data", json_list);
     
     ulfius_set_json_body_response(response, 200, json_response);
     json_decref(json_list);
 
+    json_t *json_resp = ulfius_get_json_body_response(&response_from_counter, NULL);
+    if(json_resp == NULL){
+        fprintf(stderr, "get json body error\n");
+        return 1;
+    }
+
+    //todo ok, preparo la respuesta
+    json_int_t count = json_integer_value(json_object_get(json_resp, "description"));
+
     char cant[5];
-    sprintf(cant, "%i", count);
-    logg("/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/log_api_users", ": usuarios creados -> ", cant);
+    sprintf(cant, "%lli", count);
+    logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | usuarios creados -> ", cant);
+
+    ulfius_clean_request(&request_to_counter);
+    ulfius_clean_response(&response_from_counter);
     
     return U_CALLBACK_COMPLETE;
 }
@@ -70,7 +96,6 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
 
     struct group *grupo = getgrnam("api_users");
     struct passwd *user = getpwent();
-
     while(user != NULL){
         if (user->pw_gid == grupo->gr_gid && strcmp(username, user->pw_name) == 0){
             endpwent();
@@ -83,75 +108,71 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     }
     endpwent();
 
-   // json_tmp = json_object_get(json_req, "client_address");
-   // char *ip = (char *)json_string_value(json_tmp);
-   // printf("aaa\n");
-   // printf("%s\n", ip);
+   //incremento contador
+    char ip[INET6_ADDRSTRLEN];
+    inet_ntop(request->client_address->sa_family, get_in_addr(request->client_address), ip, sizeof(ip));
 
-    struct _u_response response_from_counter;
-    struct _u_request request_to_counter;
+    struct _u_response resp_from_incr;
+    struct _u_request req_to_incr;
 
-    if(send_request(&request_to_counter , &response_from_counter, "GET", "http://contadordeusuarios.com/contador/value") == U_CALLBACK_COMPLETE){
+    if(send_request(&req_to_incr , &resp_from_incr, "POST", "http://contadordeusuarios.com/contador/increment", request->auth_basic_user, request->auth_basic_password, ip) == U_CALLBACK_ERROR){
         json_object_set_new(json_body, "code", json_integer(404));
         json_object_set_new(json_body, "description", json_string("Counter resource not found"));
         ulfius_set_json_body_response(response, 404, json_body);
+
+        ulfius_clean_request(&req_to_incr);
+        ulfius_clean_response(&resp_from_incr);
+
         return U_CALLBACK_COMPLETE;
     }
-    else{
-        json_t *json_resp = ulfius_get_json_body_response(&response_from_counter, NULL);
-        if(json_resp == NULL){
-            fprintf(stderr, "get json body error\n");
-            return 1;
-        }
 
-        char *uadd = "useradd -g api_users ";
-        char *encrypt = " -p $(openssl passwd -1 ";
-        char *close = ")";
+    //agrego user
+    char *uadd = "useradd -g api_users ";
+    char *encrypt = " -p $(openssl passwd -1 ";
+    char *close = ")";
 
-        size_t str_size = strlen(uadd) + strlen(encrypt) + strlen(close) + strlen(username) + strlen(password);
-        char *cmd = malloc(str_size);
-        strcpy(cmd, uadd);
-        strcat(cmd, username);
-        strcat(cmd, encrypt);
-        strcat(cmd, password);
-        strcat(cmd, close);
+    size_t str_size = strlen(uadd) + strlen(encrypt) + strlen(close) + strlen(username) + strlen(password);
+    char *cmd = malloc(str_size);
+    strcpy(cmd, uadd);
+    strcat(cmd, username);
+    strcat(cmd, encrypt);
+    strcat(cmd, password);
+    strcat(cmd, close);
 
-        FILE *cmd_pipe = popen(cmd, "w");
-        if(cmd_pipe == NULL) error("popen");
-        free(cmd);
+    exec_cmd(cmd);
+    free(cmd);
 
-        if(pclose(cmd_pipe) == -1) error("pclose");
+    //lo agrego para que pueda usar estos servicios
+    char *htpasswd = "htpasswd -b /etc/nginx/.htpasswd ";
 
-        json_tmp = json_object_get(json_resp, "description");
-        json_int_t id = json_integer_value(json_tmp);
+    char *pass = malloc(strlen(htpasswd) + strlen(username) + strlen(" ") + strlen(password));
+    strcpy(pass, htpasswd);
+    strcat(pass, username);
+    strcat(pass, " ");
+    strcat(pass, password);
 
-        json_object_set_new(json_body, "id", json_integer(id));
-        json_object_set_new(json_body, "username", json_string(username));
+    exec_cmd(pass);
+    free(pass);
 
-        json_object_set_new(json_body, "created_at", json_string(get_time()));
-
-        ulfius_set_json_body_response(response, 200, json_body);
-
-        char identificacion[5];
-        sprintf(identificacion, "%i", (int)id);
-        logg("log_api_users", ": usuario creado, id -> ", identificacion);
+    struct passwd *p;
+    if((p = getpwnam(username)) == NULL) {
+        perror("getpwnam");
+        return EXIT_FAILURE;
     }
+    
+    json_object_set_new(json_body, "id", json_integer(p->pw_uid));
+    json_object_set_new(json_body, "username", json_string(username));
 
-    ulfius_clean_request(&request_to_counter);
-    ulfius_clean_response(&response_from_counter);
+    json_object_set_new(json_body, "created_at", json_string(get_time()));
 
-    //incremento contador
-    struct _u_response response_from_counter_incr;
-    struct _u_request request_to_counter_incr;
+    ulfius_set_json_body_response(response, 200, json_body);
 
-    if(send_request(&request_to_counter_incr , &response_from_counter_incr, "POST", "http://contadordeusuarios.com/contador/increment") == U_CALLBACK_COMPLETE){
-        json_object_set_new(json_body, "code", json_integer(404));
-        json_object_set_new(json_body, "description", json_string("Counter resource not found"));
-        ulfius_set_json_body_response(response, 404, json_body);
-        return U_CALLBACK_COMPLETE;
-    }
-    ulfius_clean_request(&request_to_counter_incr);
-    ulfius_clean_response(&response_from_counter_incr);
+    ulfius_clean_request(&req_to_incr);
+    ulfius_clean_response(&resp_from_incr);
+
+    char identificacion[5];
+    sprintf(identificacion, "%i", (int) p->pw_uid);
+    logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | usuario creado, id -> ", identificacion);
 
     return U_CALLBACK_COMPLETE;
 }
@@ -170,9 +191,8 @@ int main()
 
     if (ulfius_start_framework(&instance) == U_OK) {
         printf("Se inició el framework en el puerto %d.\n", instance.port);
-        printf("Pulsa enter para salir.\n");
-
-        getchar();
+        
+        while(1);
     } else {
         fprintf(stderr, "Error starting framework\n");
     }

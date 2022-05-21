@@ -56,5 +56,5 @@ dkms.conf
 *.txt
 src/bin/
 TODO
-log_user_count
-log_api_users
+users.log
+counter.log
