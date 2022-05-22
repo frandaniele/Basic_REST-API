@@ -1,0 +1,15 @@
+[Unit]
+Description=servicio de contador de usuarios
+
+After = nginx.service
+Requires = nginx.service
+
+[Service]
+Type=simple
+User=admin_users
+WorkingDirectory=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin
+ExecStart=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/counter
+ExecReload=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/counter
+
+[Install]
+WantedBy=multi-user.target

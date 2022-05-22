@@ -1,92 +1,24 @@
-/etc/nginx/nginx.conf
-
-include /etc/nginx/modules-enabled/*.conf;
-
-events {
-  worker_connections  1024;
-}
-http {
- server {
-    listen 80;
-    server_name laboratorio6.com www.laboratorio6.com;
-
-    location / {
-        auth_basic 		"Restricted Content";
-        auth_basic_user_file	/etc/nginx/.htpasswd;
-    }
-    
-    location /api/users {
-        auth_basic 		"Restricted Content";
-        auth_basic_user_file	/etc/nginx/.htpasswd;
-        proxy_set_header 	X-Real-IP $remote_addr;
-        proxy_pass         	http://localhost:8081/api/users;
-    }
-}
-
-server {
-    listen 80;
-    server_name contadordeusuarios.com www.contadordeusuarios.com;
-
-    location /contador/increment {
-        auth_basic "Restricted Content";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-        proxy_pass         http://localhost:8080/contador/increment;   
-    }
-    
-    location /contador/value {
-        auth_basic "Restricted Content";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-        proxy_pass         http://localhost:8080/contador/value;   
-    }
-}
-
-server {
-  listen      80 default_server;
-  server_name _;
-  
-  return 404 '{"error": {"status_code": 404,"status": "Not Found"}}';
-}
-	access_log /var/log/nginx/access.log;
-	error_log /var/log/nginx/error.log;
-}
+creacion de admin_users, agregado a grupo adm
 
 ------------------------------------------------
 
-/etc/sudoers.d/admin_users
-User_Alias  USERADMIN = admin_users
+/etc/sudoers
+Cmnd_Alias USERAPI_COMMANDS = /usr/sbin/useradd, /usr/bin/htpasswd, /usr/bin/openssl
 
-USERADMIN ALL = NOPASSWD: /sbin/useradd
+# User privilege specification
+root	ALL=(ALL:ALL) ALL
+admin_users	ALL=(ALL) NOPASSWD: USERAPI_COMMANDS
 
 ------------------------------------------------
-
 /etc/systemd/system/counterlab.service
 
-[Unit]
-Description=servicio de contador de usuarios
-
-[Service]
-Type=simple
-User=admin_users
-WorkingDirectory=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin
-ExecStart=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/counter
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-
-------------------------------------------------
-
 /etc/systemd/system/lab6.service 
+-----------------------------------------------------------------------
+inspeccionar servicios
+journalctl -f -o cat _SYSTEMD_UNIT=lab6.service
+journalctl -f -o cat _SYSTEMD_UNIT=counterlab.service
 
-[Unit]
-Description=creador de usuarios
+------------------------------------------
+crear el archivo .htpasswd y el usuario admin
 
-[Service]
-Type=simple
-User=admin_users
-WorkingDirectory=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin
-ExecStart=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/regs
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
+-----------------------------------------------

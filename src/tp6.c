@@ -7,7 +7,6 @@ int checkBadNames(char *str){
 }
 
 int callback_get(const struct _u_request * request, struct _u_response * response, void * user_data) {
-    (void)request;
     (void)user_data;
 
     json_t *json_response = json_object();
@@ -23,6 +22,8 @@ int callback_get(const struct _u_request * request, struct _u_response * respons
 
         ulfius_clean_request(&request_to_counter);
         ulfius_clean_response(&response_from_counter);
+
+        logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | servicio de contador no disponible ", ".");
 
         return U_CALLBACK_COMPLETE;
     }
@@ -91,6 +92,9 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
         json_object_set_new(json_body, "code", json_integer(400));
         json_object_set_new(json_body, "description", json_string("Usuario o contrasenia no permitidos"));
         ulfius_set_json_body_response(response, 400, json_body);
+
+        logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | Usuario o contrasenia no permitidos", ".");
+
         return U_CALLBACK_COMPLETE;
     }
 
@@ -102,6 +106,9 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
             json_object_set_new(json_body, "code", json_integer(409));
             json_object_set_new(json_body, "description", json_string("El usuario ya existe"));
             ulfius_set_json_body_response(response, 409, json_body);
+
+            logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | Usuario repetido", ".");
+
             return U_CALLBACK_COMPLETE;
         }
         user = getpwent();
@@ -123,11 +130,13 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
         ulfius_clean_request(&req_to_incr);
         ulfius_clean_response(&resp_from_incr);
 
+        logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | Servicio de contador no disponible", ".");
+
         return U_CALLBACK_COMPLETE;
     }
 
     //agrego user
-    char *uadd = "useradd -g api_users ";
+    char *uadd = "sudo useradd -g api_users ";
     char *encrypt = " -p $(openssl passwd -1 ";
     char *close = ")";
 
@@ -143,7 +152,7 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     free(cmd);
 
     //lo agrego para que pueda usar estos servicios
-    char *htpasswd = "htpasswd -b /etc/nginx/.htpasswd ";
+    char *htpasswd = "sudo htpasswd -b /etc/nginx/.htpasswd ";
 
     char *pass = malloc(strlen(htpasswd) + strlen(username) + strlen(" ") + strlen(password));
     strcpy(pass, htpasswd);

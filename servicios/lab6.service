@@ -1,0 +1,18 @@
+[Unit]
+Description=creador de usuarios
+
+After = nginx.service
+Requires = nginx.service
+
+After = counterlab.service
+Requires = counterlab.service
+
+[Service]
+Type=simple
+User=admin_users
+WorkingDirectory=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin
+ExecStart=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/regs
+ExecReload=/home/francisco/Facultad/2022SOII/practico/laboratorios/soii---2022---laboratorio-vi-frandaniele/src/bin/regs
+
+[Install]
+WantedBy=multi-user.target
