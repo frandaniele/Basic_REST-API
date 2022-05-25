@@ -77,12 +77,3 @@ void *get_in_addr(struct sockaddr *sa){
         return &(((struct sockaddr_in*)sa)->sin_addr);
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
-
-json_t *json_response(int code, char *description){
-    json_t * json_body = json_object();
-
-    json_object_set_new(json_body, "code", json_integer(code));
-    json_object_set_new(json_body, "description", json_string(description));
-
-    return json_body;
-}

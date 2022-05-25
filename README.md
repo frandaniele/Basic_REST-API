@@ -22,9 +22,13 @@
 
 ## Setup
 Para preparar el entorno del sistema se deben seguir los siguientes pasos:
--   creación del usuario _admin_users_, perteneciente al grupo _adm_, quien se encargará de correr los servicios
+-   creo el grupo _api_users_ a quien perteneceran todos los usuarios creados con el servicio
 ``` Bash
-sudo useradd -g adm admin_users -p $(openssl passwd -1 <contrasenia>)
+sudo groupadd api_users
+```
+-   creación del usuario _admin_users_, perteneciente a su propio grupo primario y los grupos secundarios _adm_ y _api_users_, quien se encargará de correr los servicios
+``` Bash
+sudo useradd -g admin_users -G adm api_users admin_users -p $(openssl passwd -1 <contrasenia>)
 ```
 -   modifico el archivo _/etc/sudoers_ para dar permisos de ejecución de los comandos necesarios al usuario _admin_users agregando las siguientes líneas:
 ``` Bash
@@ -146,3 +150,13 @@ curl --request GET \
 ```
 ### Postman
 Para facilitar la interacción con el servidor, se realizó un documento de consultas en _Postman_ para probar las distintas funcionalidades del mismo. Una vez configurado e iniciado el servidor, se puede cargar dicho archivo en _Postman Desktop_ para poder trabajar con _localhost_ y realizar las consultas que se quieran.
+
+![new_user](img/new_user.png)
+![list_users](img/list_users.png)
+![dup_user](img/dup_user.png)
+![bad_user](img/bad_user.png)
+![large_user](img/large_user.png)
+![null_user](img/null_user.png)
+![bad_address](img/bad_address.png)
+![get_counter](img/get_counter.png)
+![incr_counter](img/incr_counter.png)
