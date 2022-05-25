@@ -20,3 +20,5 @@ int send_request( struct _u_request * request, struct _u_response * response, ch
 void exec_cmd(char *cmd);
 
 void *get_in_addr(struct sockaddr *sa);
+
+json_t *json_response(int code, char *description);

@@ -13,16 +13,12 @@ int checkBadNames(char *str){
 int callback_get(const struct _u_request * request, struct _u_response * response, void * user_data) {
     (void)user_data;
 
-    json_t *json_response = json_object();
-
     //obtengo contador
     struct _u_response response_from_counter;
     struct _u_request request_to_counter;
 
     if(send_request(&request_to_counter , &response_from_counter, "GET", "http://contadordeusuarios.com/contador/value", request->auth_basic_user, request->auth_basic_password, NULL) == U_CALLBACK_ERROR){
-        json_object_set_new(json_response, "code", json_integer(404));
-        json_object_set_new(json_response, "description", json_string("Counter resource not found"));
-        ulfius_set_json_body_response(response, 404, json_response);
+        ulfius_set_json_body_response(response, 404, json_response(404, "Counter resource not found"));
 
         ulfius_clean_request(&request_to_counter);
         ulfius_clean_response(&response_from_counter);
@@ -51,9 +47,10 @@ int callback_get(const struct _u_request * request, struct _u_response * respons
     }
     endpwent();
 
-    json_object_set_new(json_response, "data", json_list);
+    json_t *json_body = json_object();
+    json_object_set_new(json_body, "data", json_list);
     
-    ulfius_set_json_body_response(response, 200, json_response);
+    ulfius_set_json_body_response(response, 200, json_body);
     json_decref(json_list);
 
     json_t *json_resp = ulfius_get_json_body_response(&response_from_counter, NULL);
@@ -63,7 +60,7 @@ int callback_get(const struct _u_request * request, struct _u_response * respons
     }
 
     //todo ok, preparo la respuesta
-    json_int_t count = json_integer_value(json_object_get(json_resp, "description"));
+    json_int_t count = atoi(json_string_value(json_object_get(json_resp, "description")));
 
     char cant[5];
     sprintf(cant, "%lli", count);
@@ -93,10 +90,8 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
 
     //CHEQUEAR BADNAMES + USUARIO REPETIDO
     if(username == NULL || password == NULL || checkBadNames(username) || checkBadNames(password)){
-        json_object_set_new(json_body, "code", json_integer(400));
-        json_object_set_new(json_body, "description", json_string("Usuario o contrasenia no permitidos"));
-        ulfius_set_json_body_response(response, 400, json_body);
-
+        ulfius_set_json_body_response(response, 400, json_response(400, "Usuario o contrasenia no permitidos"));
+        
         logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | Usuario o contrasenia no permitidos", ".");
 
         return U_CALLBACK_COMPLETE;
@@ -107,9 +102,8 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     while(user != NULL){
         if (user->pw_gid == grupo->gr_gid && strcmp(username, user->pw_name) == 0){
             endpwent();
-            json_object_set_new(json_body, "code", json_integer(409));
-            json_object_set_new(json_body, "description", json_string("El usuario ya existe"));
-            ulfius_set_json_body_response(response, 409, json_body);
+
+            ulfius_set_json_body_response(response, 409, json_response(409, "El usuario ya existe"));
 
             logg("/var/log/laboratorio6/users.log", "Servicio de usuarios | Usuario repetido", ".");
 
@@ -127,9 +121,7 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     struct _u_request req_to_incr;
 
     if(send_request(&req_to_incr , &resp_from_incr, "POST", "http://contadordeusuarios.com/contador/increment", request->auth_basic_user, request->auth_basic_password, ip) == U_CALLBACK_ERROR){
-        json_object_set_new(json_body, "code", json_integer(404));
-        json_object_set_new(json_body, "description", json_string("Counter resource not found"));
-        ulfius_set_json_body_response(response, 404, json_body);
+        ulfius_set_json_body_response(response, 404, json_response(404, "Counter resource not found"));
 
         ulfius_clean_request(&req_to_incr);
         ulfius_clean_response(&resp_from_incr);
@@ -159,7 +151,6 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     char *echo = "echo ";
     char *htpasswd = "sudo htpasswd -i /etc/nginx/.htpasswd ";
     char *pipe = " | ";
-    //echo "test101" | htpasswd -c -i ~/temp/password admin
 
     char *pass = malloc(strlen(echo) + strlen(password) + strlen(pipe) + strlen(htpasswd) + strlen(username));
     strcpy(pass, echo);

@@ -1,196 +1,148 @@
-### Lab6 Sistemas Operativos II
+### Lab6 Sistemas Operativos II - Francisco Daniele
 ## Ingeniería en Compuatación - FCEFyN - UNC
 # Sistemas Embebidos
 
-## Introducción
-Los _sistemas embebidos_ suelen ser accedidos de manera remota. Existen distintas técnicas para hacerlo, una forma muy utilizada suelen ser las _RESTful APIs_. Estas, brindan una interfaz definida y robusta para la comunicación y manipulación del _sistema embebido_ de manera remota. Definidas para un esquema _Cliente-Servidor_ se utilizan en todas las verticales de la industria tecnológica, desde aplicaciones de _IoT_ hasta juegos multijugador.
-
-## Objetivo
-El objetivo del presente trabajo práctico es que el estudiante tenga un visión _end to end_ de una implementación básica de una _RESTful API_ sobre un _sistema embedido_.
-El estudiante deberá implementarlo interactuando con todas las capas del procesos. Desde el _testing_ funcional (alto nivel) hasta el código en C del servicio (bajo nivel).
-
 ## Desarrollo
-### Requerimientos
-Para realizar el presente trabajo practico, es necesario una computadora con _kernel_ GNU/Linux, ya que usaremos [SystemD][sysD] para implementar el manejo de nuestro servicios.
-
-### Desarrollo
-Se deberá implementar dos servicios en lenguaje C, estos son el _servicio de usuarios_ y el _servicio contador_. Cada servicio deberá exponer una _REST API_ con _Media Type_ `application/json` para todas sus funcionalidades. Con el objetivo de acelerar el proceso de desarrollo vamos a utilizar un _framework_: se propone utilizar [ulfius][ulfi]. El estudiante puede seleccionar otro, justificando la selección, o implementar el propio (no recomendado).
-El servicio debe tener configurado un [nginx][ngnx] por delante para poder direccionar el _request_ al servicio correspondiente.
-El web server, deberá autenticar el _request_ por medio de un usuario y password enviado en el _request_, definido donde el estudiante crea conveniente. Las credenciales no deberán ser enviadas a los servicios. 
-
-
-El web server deberá *solo* responder a `lab3.com` para el servicio de usuarios y `contadordeusuarios.com` para el servicio de contador. Debe retornar _404 Not Found_ para cualquier otro _path_ no existente con algún mensaje a elección con formato JSON.
-
-A modo de simplificación, usaremos sólo _HTTP_, pero aclarando que esto posee *graves problemas de seguridad*.
-Todos los servicios deben estar configurados con _SystemD_ para soportar los comandos, _restart_, _reload_, _stop_, _start_ y deberán ser inicializados de manera automática cuando el sistema operativo _botee_.
-
-
-
-Algunos servicios requieran _logear_ todas sus peticiones con el siguiente formato:
-
-```sh
-    <Timestamp> | <Nombre Del Servicio> | <Mensaje>
+```text
+├── log                 -> archivo de configuracion de logrotate
+├── nginx               -> archivos para configuracion de nginx
+├── postman             -> coleccion de consultas para Postman
+├── servicios           -> archivos de configuracion de systemD para los servicios
+├── src
+│    ├── bin            -> archivos binarios
+│    ├── include        -> libreria con funciones utilizadas en el laboratorio
+│    ├── obj            -> archivo objeto
+│    ├── tp6.c          -> source code del servicio de usuarios
+│    └── user_count.c   -> source code del servicio de contador de usuarios
+├── .gitignore
+├── LICENSE
+├── makefile            -> genera todo lo necesario para el desarrollo del trabajo
+└── README.md           -> informe del trabajo realizado
 ```
 
-El _\<Mensaje\>_ será definido por cada una de las acciones de los servicios.
-
-El gráfico \ref{fig:arq} se describe la arquitectura requerida.
-
-Se debe implementar un mecanismo para [rotar los logs][logrotate]
-
-![Arquitectura del sistema](Web_App.png)
-
-
-A continuación, detallaremos los dos servicios a crear y las funcionalidades de cada uno. 
-
-### Servicio de Usuarios
-Este servicio se encargará de crear usuarios y listarlos. Estos usuarios deberán poder _logearse_ vía _SSH_ luego de su creación.
-
-#### POST /api/users
-Endpoints para la creación de usuario en el sistema operativo:
-
-```C
-    POST http://{{server}}/api/users
+## Setup
+Para preparar el entorno del sistema se deben seguir los siguientes pasos:
+-   creación del usuario _admin_users_, perteneciente al grupo _adm_, quien se encargará de correr los servicios
+``` Bash
+sudo useradd -g adm admin_users -p $(openssl passwd -1 <contrasenia>)
 ```
-Request
-```C    
-        curl --request POST \
-            --url http:// {server}}/api/users \
-            -u USER:SECRET \
+-   modifico el archivo _/etc/sudoers_ para dar permisos de ejecución de los comandos necesarios al usuario _admin_users agregando las siguientes líneas:
+``` Bash
+Cmnd_Alias USERAPI_COMMANDS = /usr/sbin/useradd, /usr/bin/htpasswd, /usr/bin/openssl
+
+admin_users	ALL=(ALL) NOPASSWD: USERAPI_COMMANDS
+```
+-   make para generar los directorios y binarios necesarios, y
+-   sudo make setup_server para crear los directorios y archivos pertinentes a la configuracion del server: logs, nginx y de los servicios de usuario y contador. **WARNING**: si ya existe una configuración de _nginx_, será sobreescrita.
+``` Bash
+make
+sudo make setup_server
+```
+-   asociamos la IP del host con el nombre del servidor, incluyendo las siguientes líneas en el archivo /etc/hosts
+``` Bash
+<IP local>	contadordeusuarios.com
+<IP local>	laboratorio6.com
+```
+
+## Ejecucion
+Para la ejecución de los servicios seguimos los siguientes pasos:
+-   Habilitamos los servicios
+``` Bash
+sudo make enable_server
+#sudo make disable_server para deshabilitar
+```
+-   hacemos un reload de los servicios
+``` Bash
+sudo make reload_server
+```
+-   los iniciamos
+``` Bash
+sudo make start_server
+```
+
+Además podemos hacer un seguimiento de los servicios con los siguientes comandos:
+``` Bash
+journalctl -f -o cat _SYSTEMD_UNIT=lab6.service
+journalctl -f -o cat _SYSTEMD_UNIT=counterlab.service
+```
+
+## Funcionamiento de los servicios
+### Usuarios
+Este servicio cuenta con los dos endpoints pedidos por la consigna e inicia el framework en el puerto 8081.
+
+Cuando se le consulta para listar los usuarios creados, actúa de la siguiente manera:
+
+-      Le hace una request al servicio de contador mediante _send_request_ que es una funcion propia, wrapper de _ulfius_send_http_request_ con control de errores y seteo de las propiedades de la request. Si dicho servicio no está disponible se envia el mensaje de error y se lo loguea, de lo contrario se obtiene la cantidad de usuarios que se han creado.
+-      A través de _getpwent_ obtiene los usuarios creados por el servicio y los mete en una lista JSON
+-      Prepara la respuesta en formato JSON
+-      Escribe en el log del servicio y retorna con exito.
+
+Para responder al pedido de crear un usuario procede así:
+
+-       Obtiene el nombre de usuario y la contrasenia del body de la request
+-       Si alguno de los dos está vacío, contiene menos de 8 caracteres o mas de 24 o caracteres prohibidos, se retorna un error y se loguea la situacion
+-       Se chequea que no exista el usuario, de lo contario se envia el error pertinente y se loguea
+-       Se obtiene la ip del cliente y se la envia al servicio del contador con la request para incrementarlo. Si no se encuentra disponible se retorna el error y se loguea.
+-       Se prepara el comando _useradd_ y se encripta la contrasenia mediante _openssl_
+-       Se ejecuta el comando mediante _exec_cmd_ que es un wrapper de _popen_ con control de errores
+-       Se prepara el comando _htpasswd_ para poder autorizarlo al uso de estos servicios mediante nginx
+-       Se obtiene el _uid_ del usuario mediante _getpwnam_
+-       Se setea la respuesta pertinente en formato JSON
+-       Se loguea la respuesta y se retorna correctamente
+
+### Contador
+Este servicio cuenta con los dos endpoints pedidos por la consigna e inicia el framework en el puerto 8080.
+Al iniciar obtiene la cantidad de usuarios creados mediante _getpwent_ e inicia el contador del servicio en ese valor.
+
+Responde a la consulta de obtener contador de la siguiente manera:
+
+-       Mediante un puntero al contador obtiene su valor 
+-       Setea la respuesta en formato JSON
+-       Retorna con exito
+
+Cuando debe incrementar el contador realiza lo siguiente:
+
+-       Chequea que ha sido consultado desde el servicio _lab6_, de lo contrario responde con un error y loguea la situacion
+-       Obtiene la ip del cliente que crea el usuario desde la request del servicio lab6
+-       Incrementa el contador
+-       Escribe el log del servicio
+-       Setea la respuesta en formato JSON y retorna correctamente
+
+## Consultas
+### Manuales
+
+-   Nuevo usuario
+``` Bash
+curl --request POST \
+            --url http://laboratorio6.com/api/users \
+            -u admin:fran \
             --header 'accept: application/json' \
             --header 'content-type: application/json' \
-            --data '{"username": "myuser", "password": "mypassword"}'
+            --data '{"username": "myuser10", "password": "mypassword"}'
 ```
-Respuesta
-```C
-
-        {
-            "id": 142,
-            "username": "myuser",
-            "created_at": "2019-06-22 02:19:59"
-        }
-
-```
-El _\<Mensaje\>_ para el log será: _Usuario \<Id\> creado_.
-
-Cada vez que se cree un usuario, este servicio deberá incrementar el contador en el servicio de contador de usuarios. 
-En caso que el servicio de contador no este diposnible o falle, logear al falla.
-  
-#### GET /api/users
-Endpoint para obtener todos los usuarios del sistema operativo y sus identificadores.
-```C
-    GET http://{{server}}/api/users
-```
-Request
-```C
-    curl --request GET \
-        --url http://{{server}}/api/users \
-        -u USER:SECRET \
+-   Listar usuarios
+``` Bash
+curl --request GET \
+        --url http://laboratorio6.com/api/users \
+        -u admin:fran \
         --header 'accept: application/json' \
         --header 'content-type: application/json'
 ```
-Respuesta
-```C
-    {
-      "data": [
-          {
-              "user_id": 2,
-              "username": "user1",  
-          },
-          {
-              "user_id": 1,
-              "username": "user2"
-          },
-          ...
-      ]
-    }
+-   Incrementar contador
+``` Bash
+curl --request POST \
+            --url http://contadordeusuarios.com/contador/increment \
+            -u admin:fran \
+            --header 'accept: application/json' \
+            --header 'content-type: application/json' 
 ```
-El  _\<Mensaje\>_ para el log será:  _Usuario creados: \<cantidad de usuario del SO\>_
- 
-### Servicio de contador
-Este microservicio pose los endpoint del laboratorio 5, lleva un contador. Este contador debe ser implementado con el mismo _Media Type_ , `application/json`.
-
-#### POST /contador/increment
-```C
-    POST http://{{server}}/contador/increment
+-   Obtener contador
+``` Bash
+curl --request GET \
+            --url http://contadordeusuarios.com/contador/value \
+            -u admin:fran \
+            --header 'accept: application/json' \
+            --header 'content-type: application/json' 
 ```
-Request
-
-```C
-    curl --request POST \
-        --url http://{{server}}/contador/increment \
-        -u USER:SECRET \
-        --header 'accept: application/json' \
-        --header 'content-type: application/json'
-```
-
-Respuesta
-```C
-    {
-        "code": 200,
-        "description": "<new_value>"
-    }
-```
-
-El  _\<Mensaje\>_ para el log será:  _Contador Incrementado desde: \<El ip del cliente que incremento el contador.\>_
-
-
-#### GET /contador/value
-Este endpoint permite saber el valor actual del contador
-```C
-    GET http://{{server}}/contador/value
-```
-Request
-```C
-    curl --request GET \
-        --url http://{{server}}/contador/value \
-        -u USER:SECRET \
-        --header 'accept: application/json' \
-        --header 'content-type: application/json'
-```
-Respuesta
-
-```C
-    {
-        "code": 200,
-        "description": "<value>"
-    }
-```
-
-
-Este endpoint no tiene ningún requerimiento de para logging.
- 
-## Entrega
-Se deberá proveer los archivos fuente, así como cualquier otro archivo asociado a la compilación, archivos de proyecto "Makefile" y el código correctamente documentado, todo en el repositorio, donde le Estudiante debe demostrar avances semana a semana mediante _commits_.
-
-También se debe entregar un informe, guia tipo _How to_, explicando paso a paso lo realizado (puede ser un _Markdown_). El informe además debe contener el diseño de la solución con una explicacion detallada de la misma. Se debe asumir que las pruebas de compilación se realizarán en un equipo que cuenta con las herramientas típicas de consola para el desarrollo de programas (Ejemplo: gcc, make), y NO se cuenta con herramientas "GUI" para la compilación de los mismos (Ej: eclipse).
-
-El install del makefile deberá copiar los archivos de configuración de systemd para poder luego ser habilitados y ejecutados por linea de comando.
-El script debe copiar los archivos necesarios para el servicio Nginx systemd para poder luego ser habilitados y ejecutados por linea de comando.
-Los servicios deberán pasar una batería de test escritas en _postman_ provistas. TBD.
-
-### Criterios de Corrección
-- Se debe compilar el código con los flags de compilación: 
-     -Wall -Pedantic -Werror -Wextra -Wconversion -std=gnu11
-- La correcta gestion de memoria.
-- Dividir el código en módulos de manera juiciosa.
-- Estilo de código.
-- Manejo de errores
-- El código no debe contener errores, ni warnings.
-- El código no debe contener errores de cppcheck.
-
-
-## Evaluación
-El presente trabajo práctico es individual deberá entregarse antes del jueves 27 de Mayo de 2022 a las 23:55 mediante el LEV.  Será corregido y luego deberá coordinar una fecha para la defensa oral del mismo.
-
-## Referencias y ayudas
-- [Systrem D ](https://systemd.io/)
-- [System D en Freedesktop](https://www.freedesktop.org/wiki/Software/systemd/)
-- [nginx](https://docs.nginx.com/)
-- [Ulfius HTTP Framework](https://github.com/babelouest/ulfius)
-- [Kore Web PLataform](https://kore.io/)
-
-[sysD]: https://www.freedesktop.org/wiki/Software/systemd/
-[ngnx]: https://docs.nginx.com/
-[ulfi]: https://github.com/babelouest/ulfius
-[logrotate]: https://en.wikipedia.org/wiki/Log_rotation
+### Postman
+Para facilitar la interacción con el servidor, se realizó un documento de consultas en _Postman_ para probar las distintas funcionalidades del mismo. Una vez configurado e iniciado el servidor, se puede cargar dicho archivo en _Postman Desktop_ para poder trabajar con _localhost_ y realizar las consultas que se quieran.
