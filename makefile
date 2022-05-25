@@ -5,24 +5,56 @@ JANSSON = -ljansson
 
 main: build_folders regs counter
 
-start_server:
+setup_server:
 #	nginx config
-	cp /nginx/nginx.conf /etc/nginx/
+	cp ./nginx/nginx.conf /etc/nginx/
+	cp ./nginx/.htpasswd /etc/nginx/
+	chown admin_users /etc/nginx/.htpasswd
+	service nginx reload
+	service nginx start
 
 #	creacion de servicios
-	cp /servicios/counterlab.service /etc/systemd/system/
-	cp /servicios/lab6.service /etc/systemd/system/
+	cp ./servicios/counterlab.service /etc/systemd/system/
+	cp ./servicios/lab6.service /etc/systemd/system/
 	
 #	creacion de logs y permisos para modificarlos
-	sudo mkdir /var/log/laboratorio6
-	sudo chown root:adm laboratorio6/
-	sudo touch /var/log/laboratorio6/users.log
-	sudo touch /var/log/laboratorio6/counter.log
-	sudo chown admin_users:adm /var/log/laboratorio6/users.log 
-	sudo chown admin_users:adm /var/log/laboratorio6/counter.log 
-	sudo chmod 775 /var/log/laboratorio6/users.log 
-	sudo chmod 775 /var/log/laboratorio6/counter.log 
-	cp /log/laboratorio6 /etc/logrotate.d/laboratorio6/
+	mkdir /var/log/laboratorio6
+	chown root:adm laboratorio6/
+	touch /var/log/laboratorio6/users.log
+	touch /var/log/laboratorio6/counter.log
+	chown admin_users:adm /var/log/laboratorio6/users.log 
+	chown admin_users:adm /var/log/laboratorio6/counter.log 
+	chmod 640 /var/log/laboratorio6/users.log 
+	chmod 640 /var/log/laboratorio6/counter.log 
+
+#	configuracion de logrotate
+	cp ./log/laboratorio6 /etc/logrotate.d/laboratorio6/
+
+	systemctl daemon-reload
+
+enable_server:
+	systemctl enable counterlab.service
+	systemctl enable lab6.service
+
+disable_server:
+	systemctl disable counterlab.service
+	systemctl disable lab6.service
+
+reload_server:
+	service counterlab reload
+	service lab6 reload
+
+restart_server:
+	service counterlab restart
+	service lab6 restart
+	
+start_server:
+	service counterlab start
+	service lab6 start	
+	
+stop_server:
+	service counterlab stop
+	service lab6 stop	
 
 regs: regs.o utils.o
 	$(CC) $(CFLAGS) -o src/bin/regs src/obj/regs.o src/obj/utils.o $(ULFIUS) $(JANSSON)
@@ -46,4 +78,11 @@ cppcheck:
 	cppcheck --enable=all --suppress=missingIncludeSystem src/ 2>err.txt
 
 clean:
-	rm -f -r /src/bin/* /src/obj/* ./src/bin ./src/obj
+	stop_server
+	disable_server
+	rm -f -r /src/bin/* /src/obj/* ./src/bin ./src/obj  
+	rm -f -r /var/log/laboratorio6/* ./var/log/laboratorio6
+	rm -f /etc/logrotate.d/laboratorio6  
+	rm -f /etc/systemd/system/counterlab.service /etc/systemd/system/lab6.service
+	rm -f /etc/nginx/.htpasswd /etc/nginx/nginx.conf
+	systemctl daemon-reload

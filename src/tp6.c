@@ -3,7 +3,11 @@
 #define PORT 8081
 
 int checkBadNames(char *str){
-    return strchr(str, '|') || strchr(str, ' ') || strchr(str, '>') || strchr(str, '<');
+    int chars = strchr(str, '|') || strchr(str, ' ') || strchr(str, '>') || strchr(str, '<'); //check bad chars
+
+    int len = (strlen(str) < 8) || (strlen(str) > 24); //check length beetwen 8 and 24
+
+    return chars || len;
 }
 
 int callback_get(const struct _u_request * request, struct _u_response * response, void * user_data) {
@@ -88,7 +92,7 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     char *password = (char *)json_string_value(json_tmp);
 
     //CHEQUEAR BADNAMES + USUARIO REPETIDO
-    if(checkBadNames(username) || checkBadNames(password)){
+    if(username == NULL || password == NULL || checkBadNames(username) || checkBadNames(password)){
         json_object_set_new(json_body, "code", json_integer(400));
         json_object_set_new(json_body, "description", json_string("Usuario o contrasenia no permitidos"));
         ulfius_set_json_body_response(response, 400, json_body);
@@ -152,13 +156,17 @@ int callback_post(const struct _u_request * request, struct _u_response * respon
     free(cmd);
 
     //lo agrego para que pueda usar estos servicios
-    char *htpasswd = "sudo htpasswd -b /etc/nginx/.htpasswd ";
+    char *echo = "echo ";
+    char *htpasswd = "sudo htpasswd -i /etc/nginx/.htpasswd ";
+    char *pipe = " | ";
+    //echo "test101" | htpasswd -c -i ~/temp/password admin
 
-    char *pass = malloc(strlen(htpasswd) + strlen(username) + strlen(" ") + strlen(password));
-    strcpy(pass, htpasswd);
-    strcat(pass, username);
-    strcat(pass, " ");
+    char *pass = malloc(strlen(echo) + strlen(password) + strlen(pipe) + strlen(htpasswd) + strlen(username));
+    strcpy(pass, echo);
     strcat(pass, password);
+    strcat(pass, pipe);
+    strcat(pass, htpasswd);
+    strcat(pass, username);
 
     exec_cmd(pass);
     free(pass);

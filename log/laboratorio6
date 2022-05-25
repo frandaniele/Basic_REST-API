@@ -4,5 +4,5 @@
         rotate 8
         compress
         notifempty
-        create 775 admin_users adm
+        create 640 admin_users adm
 }

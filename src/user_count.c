@@ -15,20 +15,25 @@ int callback_print(const struct _u_request * request, struct _u_response * respo
     return U_CALLBACK_COMPLETE;
 }
 
-int callback_increment(const struct _u_request * request, struct _u_response * response, void * user_data) {
-    int * counter = (int *) user_data;
-    (*counter)++;
+int callback_increment(const struct _u_request * request, struct _u_response * response, void * user_data){
+    json_t * json_body = json_object();
 
     json_t *json_req = ulfius_get_json_body_request(request, NULL);
-    if(json_req == NULL){
+    if(json_req == NULL){ //es decir, le pego desde fuera de laboratorio6.com
         fprintf(stderr, "get json body error\n");
-        return -1;
+
+        json_object_set_new(json_body, "code", json_integer(403));
+        json_object_set_new(json_body, "description", json_string("Forbidden"));
+        ulfius_set_json_body_response(response, 403, json_body);
+
+        return U_CALLBACK_COMPLETE;
     }
+    int * counter = (int *) user_data;
+    (*counter)++;
 
     json_t *json_ip = json_object_get(json_req, "ip");
     logg("/var/log/laboratorio6/counter.log", "Servicio de contador | contador incrementado desde -> ip ", (char *)json_string_value(json_ip));
 
-    json_t * json_body = json_object();
     json_object_set_new(json_body, "code", json_integer(200));
     json_object_set_new(json_body, "description", json_integer(*counter));
     ulfius_set_json_body_response(response, 200, json_body);

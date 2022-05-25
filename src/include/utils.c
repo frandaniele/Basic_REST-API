@@ -54,7 +54,7 @@ int send_request(struct _u_request * request, struct _u_response * response, cha
     ulfius_init_response(response);
     
     if(ulfius_send_http_request(request, response) != U_OK){
-        fprintf(stderr, "Error in http request, no valido etc etc\n");
+        fprintf(stderr, "Error in http request\n");
     
         ulfius_clean_request(request);
         ulfius_clean_response(response);
